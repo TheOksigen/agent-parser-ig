@@ -4,7 +4,7 @@ Instagram ictimai profilləri üçün Bun + Next.js (SSR), Prisma/PostgreSQL və
 
 **Instagram API-si tələb olunmur.** Agent telefonda açıq WebView səhifəsindən post linklərini, tam caption və dəqiq tarixi oxuyur. Giriş lazım olsa istifadəçi birbaşa Instagram səhifəsində daxil olur. Instagram şifrəsi və sessiya cookie-ləri backend-ə göndərilmir. Backend profil, tapşırıq, tam caption və postun əlçatan göstəricilərini saxlayır.
 
-Bu prototipin veb və APK build-ləri yoxlanılıb. İlk versiya istifadəçi tərəfindən real cihazda işlək olaraq yoxlanılıb. **0.4.0 dəyişikliklərinin cihazda davranışı və 1500 profil üzrə yük hələ təsdiqlənməyib.** Yenilənmiş `artifacts/postarxiv-agent-0.4.0.apk` faylını əvvəlki APK-nin üzərinə quraşdırın; tətbiqi silməyin ki, giriş və qoşulma saxlanılsın. 0.1-dən keçiddə yarımçıq aktiv iş öz tarix aralığında başdan yoxlanır ki, artıq arxivdəki postların göstəriciləri də toplansın; shortcode üzrə təkrar post yaranmır.
+Bu prototipin veb və APK build-ləri yoxlanılıb. İlk versiya istifadəçi tərəfindən real cihazda işlək olaraq yoxlanılıb. **0.4.1 dəyişikliklərinin cihazda davranışı və 1500 profil üzrə yük hələ təsdiqlənməyib.** Yenilənmiş `artifacts/postarxiv-agent-0.4.1.apk` faylını əvvəlki APK-nin üzərinə quraşdırın; tətbiqi silməyin ki, giriş və qoşulma saxlanılsın. 0.1-dən keçiddə yarımçıq aktiv iş öz tarix aralığında başdan yoxlanır ki, artıq arxivdəki postların göstəriciləri də toplansın; shortcode üzrə təkrar post yaranmır.
 
 ## Lokal işə salmaq
 
@@ -41,6 +41,9 @@ Giriş tələb edən səhifələrdə və CAPTCHA zamanı avtomatik keçid yoxdur
 
 ## Instagram HTTP 429 / açılmayan linklər
 
+- **0.4.1 postu profilin içindəki kartına toxunaraq açır.** Birbaşa post URL-ni ayrıca WebView-də yükləmək çıxarılıb. Eyni pəncərədə Instagram-ın keçidi işləyir; post oxunduqdan sonra bağlama/geri düyməsi ilə profilə qayıdılır və sürüşdürmə mövqeyi bərpa olunur. Keçid idarəsi `android/app/src/main/assets/navigation.js` faylındadır.
+- Kliklənəcək kartın shortcode-u və toxunma nöqtəsindəki element yoxlanır. Növbəyə yalnız profildə real görünən kartlar əlavə edilir; daxili JSON-dakı hələ göstərilməmiş postlar ayrıca link kimi açılmır. Fasilədən sonra kart səhifədə yoxdursa, maksimum 8 sürüşdürmə ilə axtarılır; tapılmayan kart sonra yoxlanmaq üçün saxlanır.
+- Açılmış post pəncərəsi arxadakı profilin mətnindən ayrılır. Instagram klikdən sonra giriş pəncərəsi göstərərsə agent onu `NEEDS_LOGIN` kimi bildirir. Lokal brauzerdə `DeMzG16NtF9` kartının profil üzərindən tapılması və klikdəki giriş tələbinin tanınması yoxlanılıb; telefondakı daxil olunmuş sessiyada tam oxuma ayrıca yoxlanmalıdır.
 - Chrome-da da post HTTP 429 qaytarırsa Instagram sorğu limiti tətbiq edir. Ana səhifənin açılması postların da əlçatan olduğunu göstərmir. Ardıcıl yeniləmə və yeni toplama cəhdləri etmədən fasilə verin; limitin götürülmə vaxtına zəmanət yoxdur.
 - Agent əsas səhifənin HTTP statusunu oxuyur; şəkil/video resursunun xətası post xətası sayılmır. 404/410 ötürülür, 401/403 giriş yoxlaması üçün dayanır.
 - 0.4.0-da bir postun 429 və ya “Try again later” xətası həmin linki 15 dəqiqə sonraya saxlayır, digər postların yoxlanması davam edir. İkinci uğursuz cəhddə 30 dəqiqə gözlənilir; üçüncü uğursuz cəhddən sonra link səbəbi ilə ötürülür. 5xx və səhifə bağlantı xətalarında gözləmə 1, sonra 2 dəqiqədir. Daha uzun `Retry-After` varsa həmin link üçün nəzərə alınır.

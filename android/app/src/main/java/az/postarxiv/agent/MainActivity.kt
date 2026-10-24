@@ -39,7 +39,6 @@ class MainActivity : Activity() {
     private lateinit var store: Store
     private lateinit var state: JSONObject
     private lateinit var web: WebView
-    private lateinit var profileWeb: WebView
     private val pageReady = mutableMapOf<WebView, CompletableDeferred<Unit>>()
     private val loadingUrls = mutableMapOf<WebView, String>()
     private val pageFailures = mutableMapOf<WebView, JSONObject>()
@@ -108,10 +107,9 @@ class MainActivity : Activity() {
         for (b in listOf(startButton, pauseButton, login)) buttons.addView(b, LinearLayout.LayoutParams(0, dp(48), 1f))
         root.addView(buttons)
         root.addView(TextView(this).apply { text = "Oxunmayan postlar avtomatik ötürülür. Toplama üçün tətbiqi açıq saxlayın."; textSize = 10f; setTextColor(Color.GRAY); setPadding(dp(16), dp(4), dp(16), dp(8)) })
-        profileWeb = createWebView()
-        web = profileWeb
+        web = createWebView()
         val browserFrame = FrameLayout(this)
-        browserFrame.addView(profileWeb, FrameLayout.LayoutParams(-1, -1))
+        browserFrame.addView(web, FrameLayout.LayoutParams(-1, -1))
         root.addView(browserFrame, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         root.setOnApplyWindowInsetsListener { view, insets ->
@@ -141,6 +139,7 @@ class MainActivity : Activity() {
                 cooldownRemaining() > 0 || request.url.scheme != "https" || request.url.host !in listOf("www.instagram.com", "instagram.com")
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 pageFailures.remove(view)
+                if (loadingUrls.containsKey(view)) loadingUrls[view] = url
             }
             override fun onPageCommitVisible(view: WebView, url: String) {
                 val expected = loadingUrls[view] ?: return
@@ -186,7 +185,7 @@ class MainActivity : Activity() {
     private fun pageFailed(view: WebView, request: WebResourceRequest, result: JSONObject) {
         if (!request.isForMainFrame || request.url.toString() !in listOf(view.url, loadingUrls[view])) return
         pageFailures[view] = result
-        val postPage = Regex("^/(?:p|reel)/[A-Za-z0-9_-]+/?$").matches(request.url.path.orEmpty())
+        val postPage = Regex("^/(?:[A-Za-z0-9._]{1,30}/)?(?:p|reel)/[A-Za-z0-9_-]+/?$").matches(request.url.path.orEmpty())
         // A single failing post does not prove that other posts are rate-limited.
         if (!postPage && result.optString("state") in listOf("throttled", "temporary_error")) beginCooldown(result)
         // Wake the reader without throwing away the HTTP status or treating an error page as a post.
@@ -386,6 +385,130 @@ class MainActivity : Activity() {
     private suspend fun evaluate(script: String): String = suspendCancellableCoroutine { continuation ->
         web.evaluateJavascript(script) { result -> if (continuation.isActive) continuation.resume(result ?: "null") }
     }
+
+    private suspend fun navigation(mode: String, url: String = "", extra: JSONObject = JSONObject()): JSONObject {
+        val request = JSONObject(extra.toString()).put("mode", mode).put("username", task().getString("username"))
+        if (url.isNotEmpty()) request.put("shortcode", code(url))
+        val encoded = withTimeoutOrNull(3000) { evaluate(navigationScript.replace("__REQUEST__", request.toString())) }
+            ?: return JSONObject().put("state", "unknown")
+        val decoded = JSONTokener(encoded).nextValue()
+        return if (decoded is String) JSONObject(decoded) else JSONObject().put("state", "unknown")
+    }
+
+    private suspend fun tap(point: JSONObject) {
+        val x = point.getDouble("x"); val y = point.getDouble("y")
+        require(x.isFinite() && y.isFinite() && x in 0.0..1.0 && y in 0.0..1.0)
+        val downTime = SystemClock.uptimeMillis()
+        fun dispatch(action: Int) {
+            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
+                (x * web.width).toFloat(), (y * web.height).toFloat(), 0)
+            try { web.dispatchTouchEvent(event) } finally { event.recycle() }
+        }
+        dispatch(MotionEvent.ACTION_DOWN)
+        var released = false
+        try { delay(60); dispatch(MotionEvent.ACTION_UP); released = true }
+        finally { if (!released) dispatch(MotionEvent.ACTION_CANCEL) }
+    }
+
+    private fun isProfileUrl(url: String?): Boolean = runCatching {
+        val uri = java.net.URI(url ?: "")
+        uri.host in listOf("www.instagram.com", "instagram.com") &&
+            uri.path.trim('/').equals(task().getString("username"), true)
+    }.getOrDefault(false)
+
+    private suspend fun waitForProfile(timeoutMs: Long): Boolean = withTimeoutOrNull(timeoutMs) {
+        while (!navigation("inspect").optBoolean("onProfile")) delay(200)
+        navigation("restore", extra = JSONObject().put("scrollY", profileScrollY))
+        true
+    } ?: false
+
+    private suspend fun returnToProfile(): Boolean {
+        if (cooldownRemaining() > 0) return false
+        try {
+            if (navigation("inspect").optBoolean("onProfile") && !pageFailures.containsKey(web)) return true
+            pageFailures.remove(web)
+            // A client-side modal may not create an Android history entry. Close it first.
+            val close = navigation("close")
+            if (close.optString("state") == "tap") {
+                tap(close)
+                if (waitForProfile(3000)) return true
+            }
+            val history = web.copyBackForwardList()
+            val index = (history.currentIndex - 1 downTo 0).firstOrNull { isProfileUrl(history.getItemAtIndex(it)?.url) }
+            if (index != null) {
+                web.stopLoading()
+                web.goBackOrForward(index - history.currentIndex)
+                if (waitForProfile(6000)) return true
+            }
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { /* Reload only the profile if its in-page navigation could not be restored. */ }
+        return false
+    }
+
+    private suspend fun ensureProfileGrid(): JSONObject {
+        if (navigation("inspect").optBoolean("onProfile")) {
+            pageFailures[web]?.let { return JSONObject(it.toString()) }
+            return JSONObject().put("state", "ready")
+        }
+        if (returnToProfile()) return JSONObject().put("state", "ready")
+        pace()
+        return boundedRead { loadProfile(); JSONObject().put("state", "ready") }
+    }
+
+    private suspend fun readFromProfile(url: String): JSONObject {
+        val profile = ensureProfileGrid()
+        if (profile.optString("state") != "ready") return profile
+        val links = checkpoint().getJSONArray("links")
+        val positions = (0 until links.length()).associate { code(links.getString(it)) to it }
+        val targetIndex = positions[code(url)] ?: 0
+        val deadline = SystemClock.elapsedRealtime() + 120000L
+        // Normally the tile is already present. A resumed job may need to scroll back to it.
+        for (step in 0..8) {
+            var tile = navigation("locate", url)
+            var settling = 0
+            while (tile.optString("state") in listOf("positioning", "obscured", "unknown") && settling++ < 4) {
+                delay(250); tile = navigation("locate", url)
+            }
+            if (tile.optString("state") == "tap") {
+                pace()
+                // Recheck the hit target after pacing; the page may have shifted meanwhile.
+                tile = navigation("locate", url)
+                if (tile.optString("state") != "tap") continue
+                profileScrollY = tile.optDouble("scrollY", 0.0)
+                pageFailures.remove(web)
+                loadingUrls[web] = tile.optString("href", url)
+                val result = try { boundedRead {
+                    tap(tile)
+                    while (true) {
+                        pageFailures[web]?.let { throw InstagramPageException(it) }
+                        val current = extract("post", url)
+                        if (current.optString("state") in listOf("blocked", "private", "throttled", "temporary_error", "navigation_error", "network_error")) return@boundedRead current
+                        if (navigation("inspect", url).optBoolean("opened")) {
+                            delay(350)
+                            return@boundedRead readPost(url)
+                        }
+                        delay(250)
+                    }
+                    @Suppress("UNREACHABLE_CODE")
+                    JSONObject().put("state", "timeout")
+                } } finally { loadingUrls.remove(web) }
+                if (result.optString("state") !in listOf("blocked", "private") && cooldownRemaining() <= 0) returnToProfile()
+                return result
+            }
+            val page = boundedRead { extract("discover") }
+            if (page.optString("state") != "ready") return page
+            if (step == 8 || SystemClock.elapsedRealtime() >= deadline) break
+            val visible = tile.optJSONArray("codes") ?: JSONArray()
+            val indices = (0 until visible.length()).mapNotNull { positions[visible.getString(it)] }
+            val direction = if (indices.isNotEmpty() && targetIndex < indices.min()) "up" else "down"
+            message("Post profilin içində axtarılır… (${step + 1}/8)")
+            pace()
+            navigation("scroll", extra = JSONObject().put("direction", direction))
+            delay(700)
+        }
+        return JSONObject().put("state", "navigation_error").put("message", "Post kartı profilin içində tapılmadı; sonra yenidən yoxlanacaq.")
+    }
+
     private suspend fun extract(mode: String, url: String = ""): JSONObject {
         pageFailures[web]?.let { return JSONObject(it.toString()) }
         val request = JSONObject().put("mode", mode).put("username", task().getString("username"))
@@ -572,7 +695,6 @@ class MainActivity : Activity() {
             save()
         }
         checkpoint().put("version", 4); save()
-        var gridLoaded = false
         var stagnant = 0
         var lastGrid = ""
         while (currentCoroutineContext().isActive) {
@@ -601,9 +723,7 @@ class MainActivity : Activity() {
                 } else if (cached?.optString("state") == "ready" && keys.all { cached.optJSONObject("metrics")?.has(it) == true }) {
                     result = JSONObject(cached.toString())
                 } else {
-                    // Pacing is separate from the page deadline, especially after a rate limit.
-                    pace()
-                    result = boundedRead { load(url); readPost(url) }
+                    result = readFromProfile(url)
                     if (result.optString("state") in listOf("ready", "outside")) { state.remove("limitedPostCodes"); save() }
                     // A complete caption already verified in the profile document can complement the detail page.
                     if (result.optString("state") in listOf("incomplete", "expanding", "timeout", "unavailable") && cached?.optString("state") == "ready") {
@@ -622,10 +742,10 @@ class MainActivity : Activity() {
                     if (retry == null) updateBoundary(next, null, candidate, from)
                     rememberProgress(next, null)
                     flushBuffer(true)
-                    if (cooldownRemaining() > 0) { gridLoaded = false; sendHeartbeat() }
+                    if (cooldownRemaining() > 0) sendHeartbeat()
                     continue
                 }
-                if (!requireInstagramAccess(result)) { gridLoaded = false; continue }
+                if (!requireInstagramAccess(result)) continue
                 val skipped = result.optString("state") !in listOf("ready", "outside")
                 // flushBuffer may replace the JSONObject instance; always read the latest checkpoint.
                 cp = checkpoint()
@@ -655,10 +775,8 @@ class MainActivity : Activity() {
                 cp.put("discoveryDone", true).put("stopReason", "limit"); save(); continue
             }
             flushBuffer(true)
-            if (!gridLoaded) pace()
-            val result = boundedRead {
-                if (!gridLoaded) { load("https://www.instagram.com/$username/", profileWeb); gridLoaded = true }
-                else showWeb(profileWeb)
+            val profile = ensureProfileGrid()
+            val result = if (profile.optString("state") != "ready") profile else boundedRead {
                 var found = extract("discover")
                 var retries = 0
                 while (found.optString("state") in listOf("ready", "incomplete") &&
@@ -667,7 +785,7 @@ class MainActivity : Activity() {
                 }
                 found
             }
-            if (!requireInstagramAccess(result)) { gridLoaded = false; continue }
+            if (!requireInstagramAccess(result)) continue
             if (result.optString("state") == "private") {
                 api().post("fail", owned().put("code", "PRIVATE_PROFILE").put("message", "Məxfi profil toplanmır.").put("retryable", false)); clearTask(); return
             }
@@ -727,7 +845,7 @@ class MainActivity : Activity() {
     }
     override fun onDestroy() {
         runner?.cancel(); scope.cancel()
-        if (::profileWeb.isInitialized) profileWeb.destroy()
+        if (::web.isInitialized) web.destroy()
         super.onDestroy()
     }
 }

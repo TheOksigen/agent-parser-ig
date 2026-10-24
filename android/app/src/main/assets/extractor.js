@@ -4,7 +4,10 @@
   const wanted = __REQUEST__;
   const user = wanted.username.toLowerCase();
   const visible = (el) =>
-    !!el && !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+    !!el &&
+    !el.closest('[aria-hidden="true"]') &&
+    getComputedStyle(el).visibility !== "hidden" &&
+    !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
   const text = document.body?.innerText || "";
   const path = location.pathname;
   const privateNotice =
@@ -38,11 +41,22 @@
       heading,
     ),
   );
+  const loginDialog = [
+    ...document.querySelectorAll('[role="dialog"],[aria-modal="true"]'),
+  ].some(
+    (el) =>
+      visible(el) &&
+      !el.querySelector("article,time[datetime]") &&
+      /sign up or log in|log in to (?:see|view)|(?:войдите|зарегистрируйтесь).*(?:посмотреть|публикаци|профил)|(?:посмотреть|увидеть).*(?:войдите|зарегистрируйтесь)|giriş.*(?:baxmaq|görmək)|görmek.*giriş/is.test(
+        el.innerText,
+      ),
+  );
   if (
     /\/accounts\/(login|suspended)|\/challenge|\/checkpoint/.test(path) ||
     (!!document.querySelector('input[name="password"]') &&
       !document.querySelector("article")) ||
-    errorHeading
+    errorHeading ||
+    loginDialog
   )
     return JSON.stringify({
       state: "blocked",
@@ -104,8 +118,54 @@
     typeof value === "string" && /^[A-Za-z0-9._]{1,30}$/.test(value)
       ? value.toLowerCase()
       : undefined;
+  const hasRequestedTime = (el) =>
+    [...el.querySelectorAll("time[datetime]")].some((time) => {
+      try {
+        const url = new URL(
+          time.closest("a[href]")?.href || "",
+          location.origin,
+        );
+        return (
+          ["www.instagram.com", "instagram.com"].includes(url.hostname) &&
+          !url.searchParams.has("comment_id") &&
+          url.pathname.match(
+            /^\/(?:[A-Za-z0-9._]{1,30}\/)?(?:p|reel)\/([A-Za-z0-9_-]+)\/?$/,
+          )?.[1] === wanted.shortcode
+        );
+      } catch {
+        return false;
+      }
+    });
+  const hereCode = path.match(
+    /^\/(?:[A-Za-z0-9._]{1,30}\/)?(?:p|reel)\/([A-Za-z0-9_-]+)(?:\/|$)/,
+  )?.[1];
+  const dialogs = [
+    ...document.querySelectorAll('[role="dialog"],[aria-modal="true"]'),
+  ].filter(visible);
+  const postDialog = [...dialogs]
+    .reverse()
+    .find(
+      (el) =>
+        hasRequestedTime(el) ||
+        (hereCode === wanted.shortcode && el.querySelector("article")),
+    );
+  const articles = [...document.querySelectorAll("article")].filter(visible);
+  const main = document.querySelector("main");
+  // In-page posts sit above the still-mounted profile grid. Never read the grid's heading as a caption.
   const article =
-    document.querySelector("article") || document.querySelector("main");
+    wanted.mode === "post"
+      ? postDialog?.querySelector("article") ||
+        postDialog ||
+        articles.find(hasRequestedTime) ||
+        (hereCode === wanted.shortcode &&
+        articles.length === 1 &&
+        articles[0].querySelector("time[datetime]")
+          ? articles[0]
+          : null) ||
+        (main && hereCode === wanted.shortcode && hasRequestedTime(main)
+          ? main
+          : null)
+      : articles[0] || main;
   const heading = [...(article?.querySelectorAll("h1") || [])].find(visible);
   const captionBlock =
     heading?.closest("li") || heading?.parentElement?.parentElement;
@@ -462,6 +522,8 @@
       });
     const candidates = new Map();
     for (const a of document.querySelectorAll("main a[href],article a[href]")) {
+      if (!visible(a) || a.closest('[role="dialog"],[aria-modal="true"]'))
+        continue;
       const url = canonical(a.href);
       if (!url) continue;
       const code = codeOf(url);
@@ -485,20 +547,7 @@
         post,
       });
     }
-    // Unrendered embedded records are sorted by timestamp, after the actual grid order.
-    for (const [code, post] of [...byCode].sort(
-      (a, b) =>
-        (Date.parse(b[1].publishedAt) || 0) -
-        (Date.parse(a[1].publishedAt) || 0),
-    )) {
-      if (!candidates.has(code))
-        candidates.set(code, {
-          permalink: post.permalink,
-          publishedAt: post.publishedAt,
-          isPinned: post.isPinned,
-          post,
-        });
-    }
+    // Embedded records only enrich real grid tiles. Unrendered links cannot be clicked safely.
     return JSON.stringify({
       state: "ready",
       candidates: [...candidates.values()],
@@ -510,7 +559,7 @@
   const here = path.match(
     /^\/(?:[A-Za-z0-9._]{1,30}\/)?(?:p|reel)\/([A-Za-z0-9_-]+)(?:\/|$)/,
   )?.[1];
-  if (here !== code)
+  if (here !== code && !(postDialog && hasRequestedTime(postDialog)))
     return JSON.stringify({
       state: "unavailable",
       message: "Paylaşım əvəzinə başqa səhifə açıldı.",
