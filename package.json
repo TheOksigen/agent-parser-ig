@@ -1,0 +1,33 @@
+{
+  "name": "instagram-archive",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --bun next dev --hostname 0.0.0.0",
+    "build": "bun --bun prisma generate && bun --bun next build",
+    "start": "bun --bun next start --hostname 0.0.0.0",
+    "db:generate": "bun --bun prisma generate",
+    "db:migrate": "bun --bun prisma migrate deploy",
+    "scheduler": "bun scripts/scheduler.ts"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "dotenv": "18.0.9",
+    "lucide-react": "1.61.0",
+    "next": "16.4.3",
+    "pg": "8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "prisma": "7.10.1",
+    "typescript": "7.0.2"
+  }
+}

@@ -1,0 +1,16 @@
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+src/generated/
+*.tsbuildinfo
+.DS_Store
+.local/
+artifacts/
+android/.gradle/
+android/local.properties
+android/**/build/
+android/*.jks
+android/*.keystore
+android/keystore.properties

@@ -1,0 +1,28 @@
+services:
+  migrate:
+    build: .
+    image: postarxiv:local
+    env_file: .env
+    command: ["bun", "run", "db:migrate"]
+    restart: "no"
+    healthcheck:
+      disable: true
+  web:
+    image: postarxiv:local
+    env_file: .env
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  scheduler:
+    image: postarxiv:local
+    env_file: .env
+    command: ["bun", "run", "scheduler"]
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

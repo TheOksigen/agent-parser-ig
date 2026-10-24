@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["instagram_parser"]
+}
+
+enum TaskStatus {
+  QUEUED
+  RUNNING
+  WAITING_USER
+  SUCCEEDED
+  PARTIAL
+  FAILED
+  CANCELLED
+
+  @@schema("instagram_parser")
+}
+
+model Profile {
+  id              String        @id @default(cuid())
+  username        String        @unique
+  active          Boolean       @default(true)
+  publicConfirmed Boolean       @default(true)
+  intervalHours   Int           @default(24)
+  nextRunAt       DateTime      @default(now()) @db.Timestamptz(3)
+  lastCheckedAt   DateTime?     @db.Timestamptz(3)
+  collectionFrom  DateTime?     @db.Timestamptz(3)
+  collectionUntil DateTime?     @db.Timestamptz(3)
+  createdAt       DateTime      @default(now()) @db.Timestamptz(3)
+  posts           Post[]
+  postLinks       PostProfile[]
+  tasks           Task[]
+
+  @@index([active, nextRunAt])
+  @@schema("instagram_parser")
+}
+
+model Post {
+  id                    String        @id @default(cuid())
+  shortcode             String        @unique
+  profileId             String
+  authorUsername        String?
+  collaboratorUsernames String[]      @default([])
+  permalink             String
+  publishedAt           DateTime      @db.Timestamptz(3)
+  caption               String        @db.Text
+  hashtags              String[]
+  extraction            String
+  instagramId           String?
+  mediaType             String?
+  likeCount             BigInt?
+  commentCount          BigInt?
+  viewCount             BigInt?
+  playCount             BigInt?
+  shareCount            BigInt?
+  repostCount           BigInt?
+  saveCount             BigInt?
+  metricDetails         Json?
+  metadata              Json?
+  checkedAt             DateTime      @default(now()) @db.Timestamptz(3)
+  createdAt             DateTime      @default(now()) @db.Timestamptz(3)
+  profile               Profile       @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  profileLinks          PostProfile[]
+
+  @@index([profileId, publishedAt])
+  @@index([publishedAt, id])
+  @@schema("instagram_parser")
+}
+
+model PostProfile {
+  postId    String
+  profileId String
+  post      Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@id([postId, profileId])
+  @@index([profileId, postId])
+  @@schema("instagram_parser")
+}
+
+model Device {
+  id             String   @id @default(cuid())
+  installationId String   @unique
+  name           String
+  tokenHash      String   @unique
+  enabled        Boolean  @default(true)
+  state          String   @default("IDLE")
+  appVersion     String
+  lastSeenAt     DateTime @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  tasks          Task[]
+
+  @@schema("instagram_parser")
+}
+
+model Pairing {
+  id             String   @id @default(cuid())
+  codeHash       String   @unique
+  expiresAt      DateTime @db.Timestamptz(3)
+  installationId String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@schema("instagram_parser")
+}
+
+model Task {
+  id              String     @id @default(cuid())
+  profileId       String
+  deviceId        String?
+  status          TaskStatus @default(QUEUED)
+  from            DateTime   @db.Timestamptz(3)
+  until           DateTime   @db.Timestamptz(3)
+  reason          String     @default("MANUAL")
+  intervalSeconds Int        @default(10)
+  maxPosts        Int        @default(500)
+  attempts        Int        @default(0)
+  maxAttempts     Int        @default(5)
+  availableAt     DateTime   @default(now()) @db.Timestamptz(3)
+  leaseToken      String?
+  leaseExpiresAt  DateTime?  @db.Timestamptz(3)
+  checkpoint      Json?
+  postsReceived   Int        @default(0)
+  skippedPosts    Int        @default(0)
+  errorCode       String?
+  message         String?
+  oldestSeenAt    DateTime?  @db.Timestamptz(3)
+  finishedAt      DateTime?  @db.Timestamptz(3)
+  createdAt       DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime   @updatedAt @db.Timestamptz(3)
+  profile         Profile    @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  device          Device?    @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  receipts        Receipt[]
+
+  @@index([status, availableAt, createdAt])
+  @@index([profileId, from, until])
+  @@index([deviceId, status])
+  @@schema("instagram_parser")
+}
+
+model CollectorSettings {
+  id              String   @id @default("collector")
+  intervalSeconds Int      @default(10)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  @@schema("instagram_parser")
+}
+
+model Receipt {
+  id        String   @id @default(cuid())
+  taskId    String
+  batchId   String
+  count     Int
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, batchId])
+  @@schema("instagram_parser")
+}
+
+model RateLimit {
+  key       String   @id
+  count     Int      @default(1)
+  expiresAt DateTime @db.Timestamptz(3)
+
+  @@schema("instagram_parser")
+}
