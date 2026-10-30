@@ -733,20 +733,17 @@ class MainActivity : Activity() {
 
     private fun code(url: String) = java.net.URI(url).path.split('/')[2]
 
-    private fun updateBoundary(next: JSONObject, result: JSONObject?, candidate: JSONObject?, from: Instant) {
+    private fun updateBoundary(next: JSONObject, result: JSONObject?, from: Instant) {
         if (result == null || !result.has("publishedAt")) {
             next.put("olderStreak", 0); next.remove("previousDate"); return
         }
         val date = Instant.parse(result.getString("publishedAt"))
         if (!next.has("oldestSeenAt") || next.isNull("oldestSeenAt") || date < Instant.parse(next.getString("oldestSeenAt"))) next.put("oldestSeenAt", date.toString())
-        // Never stop at a pinned post or at the first few grid items. Instagram can reorder its grid.
-        if (candidate?.optBoolean("isPinned") == true || result.optBoolean("isPinned") || next.optInt("index") <= 3) return
-        val previous = next.optString("previousDate").takeIf { it.isNotEmpty() && it != "null" }?.let { Instant.parse(it) }
-        val ordered = previous == null || !date.isAfter(previous)
-        next.put("olderStreak", if (date.isBefore(from) && ordered) next.optInt("olderStreak") + 1 else 0)
+        // Four consecutive posts before the requested start date end the scan.
+        next.put("olderStreak", if (date.isBefore(from)) next.optInt("olderStreak") + 1 else 0)
         next.put("previousDate", date.toString())
         // This is a bounded chronological scan, not a claim that Instagram exposed its full history.
-        if (next.optInt("olderStreak") >= 6) next.put("discoveryDone", true).put("stopReason", "date_boundary")
+        if (next.optInt("olderStreak") >= 4) next.put("discoveryDone", true).put("stopReason", "date_boundary")
     }
 
     private suspend fun collectTask() {
@@ -825,7 +822,7 @@ class MainActivity : Activity() {
                 if (cooldownRemaining() <= 0 && result.optString("state") in listOf("throttled", "temporary_error", "navigation_error")) {
                     val next = JSONObject(checkpoint().toString()).put("phase", "posts").put("index", if (retry == null) index + 1 else index)
                     deferPost(next, url, result, retry)
-                    if (retry == null) updateBoundary(next, null, candidate, from)
+                    if (retry == null) updateBoundary(next, null, from)
                     rememberProgress(next, null)
                     flushBuffer(true)
                     if (cooldownRemaining() > 0) sendHeartbeat()
@@ -848,7 +845,7 @@ class MainActivity : Activity() {
                         next.put("matched", next.optInt("matched") + 1)
                     } else next.put("filtered", next.optInt("filtered") + 1)
                 }
-                if (retry == null) updateBoundary(next, if (skipped) null else result, candidate, from)
+                if (retry == null) updateBoundary(next, if (skipped) null else result, from)
                 state.optJSONObject("candidates")?.remove(code(url))
                 rememberProgress(next, post)
                 val buffer = state.optJSONArray("buffer") ?: JSONArray()
