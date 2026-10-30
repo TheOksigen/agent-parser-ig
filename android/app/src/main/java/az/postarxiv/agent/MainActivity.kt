@@ -46,6 +46,7 @@ class MainActivity : Activity() {
     private val extractorScript by lazy { assets.open("extractor.js").bufferedReader().use { it.readText() } }
     private val navigationScript by lazy { assets.open("navigation.js").bufferedReader().use { it.readText() } }
     private var profileScrollY = 0.0
+    private var browsingGrid = "posts"
     private lateinit var status: TextView
     private lateinit var details: TextView
     private lateinit var taskIndicator: View
@@ -97,7 +98,7 @@ class MainActivity : Activity() {
     private fun task() = state.getJSONObject("task")
     private fun checkpoint() = state.getJSONObject("checkpoint")
     private fun owned() = JSONObject().put("taskId", task().getString("id")).put("leaseToken", task().getString("leaseToken"))
-    private fun blankCheckpoint() = JSONObject().put("phase", "discovery").put("links", JSONArray()).put("index", 0).put("scrolls", 0).put("skipped", 0).put("version", 4).put("filtered", 0).put("matched", 0).put("olderStreak", 0).put("discoveryDone", false).put("deferredPosts", JSONArray())
+    private fun blankCheckpoint() = JSONObject().put("grid", "reels").put("secondGrid", false).put("linkGrids", JSONArray()).put("phase", "discovery").put("links", JSONArray()).put("index", 0).put("scrolls", 0).put("skipped", 0).put("version", 4).put("filtered", 0).put("matched", 0).put("olderStreak", 0).put("discoveryDone", false).put("deferredPosts", JSONArray())
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -405,7 +406,7 @@ class MainActivity : Activity() {
     }
 
     private suspend fun loadProfile() {
-        val url = "https://www.instagram.com/${task().getString("username")}/"
+        val url = "https://www.instagram.com/${task().getString("username")}/${if (browsingGrid == "reels") "reels/" else ""}"
         if (cooldownRemaining() > 0) throw InstagramPageException(JSONObject()
             .put("state", state.optString("instagramCooldownKind", "throttled"))
             .put("message", state.getString("instagramCooldownReason")).put("retryAt", state.getLong("instagramCooldownUntil")))
@@ -426,7 +427,7 @@ class MainActivity : Activity() {
     }
 
     private suspend fun navigation(mode: String, url: String = "", extra: JSONObject = JSONObject()): JSONObject {
-        val request = JSONObject(extra.toString()).put("mode", mode).put("username", task().getString("username"))
+        val request = JSONObject(extra.toString()).put("mode", mode).put("username", task().getString("username")).put("grid", browsingGrid)
         if (url.isNotEmpty()) request.put("shortcode", code(url))
         val encoded = withTimeoutOrNull(3000) { evaluate(navigationScript.replace("__REQUEST__", request.toString())) }
             ?: return JSONObject().put("state", "unknown")
@@ -452,7 +453,7 @@ class MainActivity : Activity() {
     private fun isProfileUrl(url: String?): Boolean = runCatching {
         val uri = java.net.URI(url ?: "")
         uri.host in listOf("www.instagram.com", "instagram.com") &&
-            uri.path.trim('/').equals(task().getString("username"), true)
+            uri.path.trim('/').equals(task().getString("username") + if (browsingGrid == "reels") "/reels" else "", true)
     }.getOrDefault(false)
 
     private suspend fun waitForProfile(timeoutMs: Long): Boolean = withTimeoutOrNull(timeoutMs) {
@@ -514,6 +515,10 @@ class MainActivity : Activity() {
                 tile = navigation("locate", url)
                 if (tile.optString("state") != "tap") continue
                 profileScrollY = tile.optDouble("scrollY", 0.0)
+                // Read the visible tile again on resume/device handoff; candidates are local only.
+                val grid = extract("discover").optJSONArray("candidates") ?: JSONArray()
+                val gridMetrics = (0 until grid.length()).map { grid.getJSONObject(it) }
+                    .firstOrNull { code(it.getString("permalink")) == code(url) }?.optJSONObject("gridMetrics")
                 pageFailures.remove(web)
                 loadingUrls[web] = tile.optString("href", url)
                 val result = try { boundedRead {
@@ -531,6 +536,15 @@ class MainActivity : Activity() {
                     @Suppress("UNREACHABLE_CODE")
                     JSONObject().put("state", "timeout")
                 } } finally { loadingUrls.remove(web) }
+                if (result.optString("state") == "ready" && gridMetrics != null) {
+                    val metrics = result.optJSONObject("metrics") ?: JSONObject()
+                    gridMetrics.keys().forEach { key ->
+                        val previous = metrics.optJSONObject(key)
+                        val incoming = gridMetrics.getJSONObject(key)
+                        if (previous == null || (previous.optBoolean("approximate") && !incoming.optBoolean("approximate"))) metrics.put(key, incoming)
+                    }
+                    result.put("metrics", metrics)
+                }
                 if (result.optString("state") !in listOf("blocked", "private") && cooldownRemaining() <= 0) returnToProfile()
                 return result
             }
@@ -761,11 +775,30 @@ class MainActivity : Activity() {
             save()
         }
         checkpoint().put("version", 4); save()
+        if (!checkpoint().has("grid")) checkpoint().put("grid", "posts")
+        if (!checkpoint().has("linkGrids")) checkpoint().put("linkGrids", JSONArray().apply {
+            repeat(checkpoint().getJSONArray("links").length()) { put(checkpoint().getString("grid")) }
+        })
+        save()
         var stagnant = 0
         var lastGrid = ""
         while (currentCoroutineContext().isActive) {
             awaitCooldown()
             var cp = checkpoint()
+            if (cp.optBoolean("discoveryDone") && !cp.optBoolean("secondGrid") &&
+                cp.optString("stopReason") in listOf("date_boundary", "page_end", "profile_unavailable")) {
+                // Discard only unvisited tiles beyond this tab's date boundary.
+                val visited = cp.optInt("index")
+                val links = cp.getJSONArray("links")
+                val grids = cp.getJSONArray("linkGrids")
+                while (links.length() > visited) links.remove(links.length() - 1)
+                while (grids.length() > visited) grids.remove(grids.length() - 1)
+                cp.put("grid", if (cp.optString("grid") == "reels") "posts" else "reels")
+                    .put("secondGrid", true).put("discoveryDone", false).put("olderStreak", 0)
+                cp.remove("stopReason"); cp.remove("previousDate")
+                profileScrollY = 0.0; stagnant = 0; lastGrid = ""
+                save()
+            }
             val normalPost = cp.optString("stopReason") != "date_boundary" && cp.getInt("index") < cp.getJSONArray("links").length()
             val deferred = cp.optJSONArray("deferredPosts") ?: JSONArray()
             val retry = if (!normalPost && cp.optBoolean("discoveryDone"))
@@ -777,6 +810,9 @@ class MainActivity : Activity() {
             if (normalPost || retry != null) {
                 val index = cp.getInt("index")
                 val url = retry?.getString("permalink") ?: cp.getJSONArray("links").getString(index)
+                val linkIndex = if (retry == null) index else (0 until cp.getJSONArray("links").length()).first { cp.getJSONArray("links").getString(it) == url }
+                val targetGrid = cp.getJSONArray("linkGrids").optString(linkIndex, cp.optString("grid", "posts"))
+                if (browsingGrid != targetGrid) { browsingGrid = targetGrid; profileScrollY = 0.0 }
                 val candidate = state.optJSONObject("candidates")?.optJSONObject(code(url))
                 val cached = candidate?.optJSONObject("post")
                 val knownDate = candidate?.optString("publishedAt")?.takeIf { it.isNotBlank() && it != "null" }?.let { Instant.parse(it) }
@@ -828,6 +864,17 @@ class MainActivity : Activity() {
                     if (cooldownRemaining() > 0) sendHeartbeat()
                     continue
                 }
+                if (result.optString("state") == "ready") {
+                    val metrics = result.optJSONObject("metrics") ?: JSONObject()
+                    candidate?.optJSONObject("gridMetrics")?.let { extra ->
+                        extra.keys().forEach { key ->
+                            val previous = metrics.optJSONObject(key)
+                            val incoming = extra.getJSONObject(key)
+                            if (previous == null || (previous.optBoolean("approximate") && !incoming.optBoolean("approximate"))) metrics.put(key, incoming)
+                        }
+                    }
+                    result.put("metrics", metrics)
+                }
                 if (!requireInstagramAccess(result)) continue
                 val skipped = result.optString("state") !in listOf("ready", "outside")
                 // flushBuffer may replace the JSONObject instance; always read the latest checkpoint.
@@ -858,6 +905,8 @@ class MainActivity : Activity() {
                 cp.put("discoveryDone", true).put("stopReason", "limit"); save(); continue
             }
             flushBuffer(true)
+            val discoveryGrid = cp.optString("grid", "posts")
+            if (browsingGrid != discoveryGrid) { browsingGrid = discoveryGrid; profileScrollY = 0.0 }
             val profile = ensureProfileGrid()
             val result = if (profile.optString("state") != "ready") profile else boundedRead {
                 var found = extract("discover")
@@ -885,7 +934,7 @@ class MainActivity : Activity() {
             for (i in 0 until discovered.length()) {
                 val c = discovered.getJSONObject(i)
                 val url = c.getString("permalink"); val id = code(url); gridCodes.add(id)
-                if (existing.add(id) && links.length() < maxPosts) { links.put(url); candidates.put(id, c); added++ }
+                if (existing.add(id) && links.length() < maxPosts) { links.put(url); cp.getJSONArray("linkGrids").put(discoveryGrid); candidates.put(id, c); added++ }
             }
             val signature = gridCodes.joinToString(",")
             stagnant = if (signature == lastGrid) stagnant + 1 else 0

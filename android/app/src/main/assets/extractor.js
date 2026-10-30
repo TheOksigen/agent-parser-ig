@@ -516,8 +516,34 @@
     delete post.metrics.viewCount;
   }
 
+    const parseCount = (raw) => {
+      const compact = raw.trim().replace(/[\s\u00a0\u202f]/g, "");
+      const match = compact.match(
+        /^(.*?)(k|m|b|тыс\.?|млн\.?|млрд\.?|min|milyon|milyar)$/i,
+      );
+      if (match) {
+        const suffix = match[2].toLowerCase().replace(".", "");
+        const multiplier = /^(k|тыс|min)$/.test(suffix)
+          ? 1e3
+          : /^(m|млн|milyon)$/.test(suffix)
+            ? 1e6
+            : 1e9;
+        const n = Number(match[1].replace(",", ".")) * multiplier;
+        return Number.isFinite(n) &&
+          n >= 0 &&
+          Number.isSafeInteger(Math.round(n))
+          ? { value: Math.round(n), approximate: true }
+          : null;
+      }
+      // Whole counts only: separators must form thousands groups, never guess decimal values.
+      if (!/^\d+$/.test(compact) && !/^\d{1,3}(?:[.,]\d{3})+$/.test(compact))
+        return null;
+      const n = integer(compact.replace(/[.,]/g, ""));
+      return n === undefined ? null : { value: n, approximate: false };
+    };
+
   if (wanted.mode === "discover") {
-    if (path.replaceAll("/", "").toLowerCase() !== user)
+    if (![user, `${user}/reels`].includes(path.replace(/^\/+|\/+$/g, "").toLowerCase()))
       return JSON.stringify({
         state: "unavailable",
         message: "Profil səhifəsi açılmadı.",
@@ -542,10 +568,24 @@
         (time && Number.isFinite(Date.parse(time))
           ? new Date(time).toISOString()
           : undefined);
+      const gridMetrics = {};
+      for (const icon of a.querySelectorAll('svg[aria-label]')) {
+        const label = icon.getAttribute("aria-label") || "";
+        const key = /^(views?|view count(?: icon)?|baxış|görüntülenme|просмотры)$/i.test(label)
+          ? "viewCount" : /^(plays?|play count(?: icon)?|oynatma|воспроизведения)$/i.test(label) ? "playCount" : null;
+        if (!key || !visible(icon)) continue;
+        for (let el = icon.parentElement, depth = 0; el && a.contains(el) && depth < 4; el = el.parentElement, depth++) {
+          const raw = (el.innerText || "").trim();
+          const parsed = parseCount(raw);
+          if (parsed) { gridMetrics[key] = { ...parsed, source: "dom", label: `${raw} ${label}` }; break; }
+          if (raw.length > 80) break;
+        }
+      }
       candidates.set(code, {
         permalink: url,
         publishedAt,
         isPinned: pinned || post?.isPinned,
+        gridMetrics,
         post,
       });
     }
@@ -588,31 +628,6 @@
     };
     const number =
       "(\\d[\\d\\s.,\\u00a0\\u202f]*(?:[KMBkmb]|тыс\\.?|млн\\.?|млрд\\.?|min|milyon|milyar)?)";
-    const parseCount = (raw) => {
-      const compact = raw.trim().replace(/[\s\u00a0\u202f]/g, "");
-      const match = compact.match(
-        /^(.*?)(k|m|b|тыс\.?|млн\.?|млрд\.?|min|milyon|milyar)$/i,
-      );
-      if (match) {
-        const suffix = match[2].toLowerCase().replace(".", "");
-        const multiplier = /^(k|тыс|min)$/.test(suffix)
-          ? 1e3
-          : /^(m|млн|milyon)$/.test(suffix)
-            ? 1e6
-            : 1e9;
-        const n = Number(match[1].replace(",", ".")) * multiplier;
-        return Number.isFinite(n) &&
-          n >= 0 &&
-          Number.isSafeInteger(Math.round(n))
-          ? { value: Math.round(n), approximate: true }
-          : null;
-      }
-      // Whole counts only: separators must form thousands groups, never guess decimal values.
-      if (!/^\d+$/.test(compact) && !/^\d{1,3}(?:[.,]\d{3})+$/.test(compact))
-        return null;
-      const n = integer(compact.replace(/[.,]/g, ""));
-      return n === undefined ? null : { value: n, approximate: false };
-    };
     const record = (key, raw, label) => {
       const parsed = parseCount(raw);
       if (!parsed) return false;

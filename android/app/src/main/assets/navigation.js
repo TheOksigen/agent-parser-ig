@@ -29,7 +29,7 @@
   const onProfile =
     ["www.instagram.com", "instagram.com"].includes(location.hostname) &&
     location.pathname.replace(/^\/+|\/+$/g, "").toLowerCase() ===
-      wanted.username.toLowerCase() &&
+      `${wanted.username.toLowerCase()}${wanted.grid === "reels" ? "/reels" : ""}` &&
     !postDialog;
   const opened =
     !!wanted.shortcode &&

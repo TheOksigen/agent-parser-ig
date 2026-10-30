@@ -18,6 +18,9 @@ const postUrl = z
 const checkpointSchema = z
   .object({
     phase: z.enum(["discovery", "posts"]),
+    grid: z.enum(["posts", "reels"]).optional(),
+    secondGrid: z.boolean().optional(),
+    linkGrids: z.array(z.enum(["posts", "reels"])).max(10000).optional(),
     links: z.array(postUrl).max(10000),
     index: z.number().int().min(0).max(10000),
     scrolls: z.number().int().min(0).max(10000),

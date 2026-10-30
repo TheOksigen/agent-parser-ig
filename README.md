@@ -142,3 +142,11 @@ artifacts/         Hazır manual yoxlama APK-si və ekran görüntüləri (Git-�
 ```
 
 İnterfeysdə saxta profil və post yoxdur. Real məlumat Android agentdən gəlir. İstəyə uyğun avtomatik test faylları yaradılmayıb.
+
+## Reels — 0.4.11
+
+Yeni toplama əvvəl `/username/reels/`, sonra əsas profil lentini yoxlayır. Eyni shortcode təkrar post yaratmır. Hər bölmədə 4 ardıcıl köhnə post həmin bölmənin yoxlanmasını dayandırır; ümumi post/sürüşdürmə limitləri saxlanılır.
+
+Reels kartındakı `View Count Icon` yanında göstərilən say `Baxış` kimi saxlanılır. `59.1K` kimi dəyərlər təxmini qeyd edilir. Brauzerdə 870, 6 141 və ≈59 100 baxış real kartlardan oxunub; telefonda tam toplama ayrıca yoxlanmalıdır.
+
+Backend və APK birlikdə yenilənməlidir: bölmə və linklərin hansı bölmədən gəldiyi checkpoint-də saxlanılır. Əvvəlki tapşırıq əvəzinə yeni toplama başladın ki, Reels mərhələsi əvvəl işləsin. APK: `artifacts/postarxiv-agent-0.4.11.apk`.
