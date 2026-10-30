@@ -16,7 +16,7 @@ type ProfileSummary = {
   range: string;
   checked: string;
 };
-export function ProfileAccordion({ profile: p }: { profile: ProfileSummary }) {
+export function ProfileAccordion({ profile: p, compact = false }: { profile: ProfileSummary; compact?: boolean }) {
   const [posts, setPosts] = useState<PostView[] | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -94,7 +94,7 @@ export function ProfileAccordion({ profile: p }: { profile: ProfileSummary }) {
           <div className="button-row">
             <Link
               className="button secondary small"
-              href={`/?profile=${encodeURIComponent(p.username)}`}
+              href={compact ? `/manual?q=${encodeURIComponent(p.username)}#manualProfile` : `/?profile=${encodeURIComponent(p.username)}`}
             >
               Tarix seç / topla
             </Link>
@@ -114,12 +114,24 @@ export function ProfileAccordion({ profile: p }: { profile: ProfileSummary }) {
             </ActionButton>
           </div>
         </div>
-        <p className="profile-posts-label">
-          Arxivdəki bütün postlar · ən yeni əvvəl
-        </p>
         <div aria-busy={loading}>
           {posts?.map((post) => (
-            <PostCard key={post.id} post={post} />
+            compact ? (
+              <article className="manual-post-row" key={post.id}>
+                <div className="manual-post-main">
+                  <time dateTime={post.publishedAt}>{post.publishedLabel}</time>
+                  <details className="manual-caption">
+                    <summary>{post.caption || "Bu paylaşımın təsviri yoxdur."}</summary>
+                    {post.caption && <p>{post.caption}</p>}
+                  </details>
+                </div>
+                <div className="manual-post-meta">
+                  {post.extra.find(([label]) => label === "Növ")?.[1] && <span>{post.extra.find(([label]) => label === "Növ")?.[1]}</span>}
+                  {post.metrics.map((metric) => <span key={metric.key} title={metric.title}>{metric.label}: <strong>{metric.value}</strong></span>)}
+                  <a href={post.permalink} target="_blank" rel="noopener noreferrer" aria-label="Paylaşımı Instagram-da aç">Instagram <ArrowUpRight size={13} /></a>
+                </div>
+              </article>
+            ) : <PostCard key={post.id} post={post} />
           ))}
           {posts?.length === 0 && (
             <p className="profile-empty muted">
@@ -133,6 +145,7 @@ export function ProfileAccordion({ profile: p }: { profile: ProfileSummary }) {
               {error}
             </p>
           )}
+          {compact && posts && !loading && !error && <button className="button secondary small" onClick={() => void load()}>Postları yenilə</button>}
           {loading ? (
             <p role="status">
               <LoaderCircle size={15} className="spin" /> Postlar yüklənir…

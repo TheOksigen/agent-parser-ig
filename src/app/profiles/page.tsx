@@ -105,11 +105,6 @@ export default async function Profiles({
           )}
         </nav>
       )}
-      <p className="muted text-small below-note">
-        Paylaşımlar səhifəsində tarix seçib “Topla və göstər” düyməsini basın.
-        Dövri yoxlama həmin tarix aralığında aparılır. Arxivlənmiş postlar
-        saxlanılır.
-      </p>
     </Shell>
   );
 }

@@ -125,6 +125,9 @@ export default async function Tasks({
       <CollectionSettingsForm
         intervalSeconds={settings?.intervalSeconds ?? 10}
       />
+      <p className="muted text-small">
+        Aktiv tapşırığı dayandıra, tamamlanmış və ya dayandırılmış tapşırığı silə bilərsiniz. Arxivdəki paylaşımlar saxlanılır. Profilin dövri toplamasını da dayandırmaq üçün onu <Link className="text-link" href="/profiles">Profillər</Link> bölməsində deaktiv edin.
+      </p>
       <div className="section-heading">
         <h2>{total} tapşırıq</h2>
         <span className="muted text-small">Hər 30 saniyədə yenilənir</span>
@@ -210,7 +213,7 @@ export default async function Tasks({
                     {task.oldestSeenAt &&
                       ` · Ən köhnə görülən: ${dateTime(task.oldestSeenAt)}`}
                   </span>
-                  {(activeStatuses as readonly string[]).includes(
+                  <div className="task-actions">{(activeStatuses as readonly string[]).includes(
                     task.status,
                   ) ? (
                     <ActionButton
@@ -220,10 +223,15 @@ export default async function Tasks({
                       Dayandır
                     </ActionButton>
                   ) : (
-                    <ActionButton action="task-retry" payload={{ id: task.id }}>
-                      Yenidən topla
-                    </ActionButton>
-                  )}
+                    <>
+                      <ActionButton action="task-retry" payload={{ id: task.id }}>
+                        Yenidən topla
+                      </ActionButton>
+                      <ActionButton action="task-delete" payload={{ id: task.id }} confirmation="Bu tapşırıq silinsin? Arxivdəki paylaşımlar saxlanılacaq.">
+                        Sil
+                      </ActionButton>
+                    </>
+                  )}</div>
                 </div>
               </article>
             ))}

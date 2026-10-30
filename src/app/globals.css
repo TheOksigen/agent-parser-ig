@@ -433,6 +433,16 @@ main:not(.login-page):not(.error-page) {
 .search-panel {
   padding: 12px;
 }
+.manual-collection {
+  display: block;
+  margin-bottom: 16px;
+}
+.manual-collection h2 {
+  margin: 0 0 6px;
+}
+.manual-collection .check {
+  margin-top: 12px;
+}
 .search-fields {
   display: flex;
   gap: 8px;
@@ -829,6 +839,11 @@ td {
   gap: 12px;
   margin-top: 10px;
 }
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .setup-guide {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1120,6 +1135,26 @@ footer {
   padding: 20px 14px;
   font-size: 12px;
 }
+.manual-post-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.manual-post-main { min-width: 0; flex: 1; }
+.manual-post-main time { color: var(--muted); font-size: 11px; }
+.manual-caption summary { cursor: pointer; list-style: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.manual-caption summary::-webkit-details-marker { display: none; }
+.manual-caption p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.manual-post-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 12px; }
+.manual-post-meta a { display: inline-flex; align-items: center; gap: 3px; }
+.profile-load-state button + button { margin-left: 8px; }
+@media (max-width: 760px) {
+  .manual-post-row { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .manual-post-main { width: 100%; }
+}
 .profile-load-state:not(:empty) {
   padding: 12px 14px;
 }
@@ -1177,6 +1212,12 @@ footer {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px 12px;
     align-items: end;
+  }
+  .manual-collection {
+    display: block;
+  }
+  .manual-collection .search-bottom {
+    display: flex;
   }
   .search-fields {
     grid-column: 1;

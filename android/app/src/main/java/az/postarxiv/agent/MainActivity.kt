@@ -48,6 +48,7 @@ class MainActivity : Activity() {
     private var profileScrollY = 0.0
     private lateinit var status: TextView
     private lateinit var details: TextView
+    private lateinit var taskIndicator: View
     private lateinit var startButton: Button
     private lateinit var pauseButton: Button
     private lateinit var setup: LinearLayout
@@ -63,7 +64,34 @@ class MainActivity : Activity() {
     private val green = Color.rgb(33, 118, 86)
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-    private fun message(text: String) { lastMessage = text; status.text = text }
+    private fun message(text: String) {
+        lastMessage = text
+        status.text = text
+        val color = when {
+            listOf("xəta", "alınmadı", "dayandırıldı", "dayandırılıb").any { text.contains(it, true) } -> Color.rgb(190, 68, 62)
+            listOf("gözlənilir", "gözləyir", "giriş", "fasilə", "yoxlamanı tamamla").any { text.contains(it, true) } -> Color.rgb(202, 145, 38)
+            state.optJSONObject("task") != null -> green
+            else -> Color.rgb(143, 153, 147)
+        }
+        (taskIndicator.background as? android.graphics.drawable.GradientDrawable)?.setColor(color)
+        updateTaskDisplay()
+    }
+    private fun updateTaskDisplay() {
+        val current = state.optJSONObject("task") ?: run { details.text = ""; return }
+        val username = current.optString("username").takeIf { it.isNotBlank() } ?: return
+        val checkpoint = state.optJSONObject("checkpoint") ?: JSONObject()
+        val total = checkpoint.optJSONArray("links")?.length() ?: 0
+        if (checkpoint.optString("phase") != "posts" || total == 0) {
+            details.text = "@$username"
+            return
+        }
+        val index = checkpoint.optInt("index").coerceIn(0, total)
+        val deferred = checkpoint.optJSONArray("deferredPosts")?.length() ?: 0
+        val resolved = (index - deferred).coerceAtLeast(0)
+        val progressTotal = if (checkpoint.optString("stopReason") == "date_boundary") index else total
+        val progress = if (progressTotal > 0) (resolved * 100 / progressTotal).coerceIn(0, 100) else 0
+        details.text = "@$username · $resolved/$progressTotal · $progress%"
+    }
     private fun save() { store.write(state) }
     private fun api() = Backend(state.getString("server"), state.getString("token"))
     private fun task() = state.getJSONObject("task")
@@ -84,13 +112,25 @@ class MainActivity : Activity() {
         if (!state.has("token")) state.put("token", UUID.randomUUID().toString() + UUID.randomUUID().toString())
         save()
         window.statusBarColor = green
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.WHITE); setPadding(0, dp(24), 0, 0) }
-        val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(12), dp(16), dp(8)) }
-        header.addView(TextView(this).apply { text = "Postarxiv Agent"; textSize = 23f; setTextColor(green); setTypeface(null, 1) })
-        status = TextView(this).apply { textSize = 13f; setTextColor(Color.DKGRAY); setPadding(0, dp(8), 0, dp(6)) }
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.WHITE); setPadding(0, dp(8), 0, 0) }
+        val header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, dp(12), 0) }
+        status = TextView(this).apply { textSize = 12f; setTextColor(Color.DKGRAY); setPadding(0, dp(2), 0, dp(3)) }
         details = TextView(this).apply { textSize = 11f; setTextColor(Color.GRAY) }
-        header.addView(status); header.addView(details); root.addView(header)
-        setup = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), 0, dp(16), dp(8)) }
+        taskIndicator = View(this).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Color.rgb(143, 153, 147))
+            }
+        }
+        val taskRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, dp(2), 0, dp(2))
+            addView(taskIndicator, LinearLayout.LayoutParams(dp(7), dp(7)).apply { marginEnd = dp(7) })
+            addView(details, LinearLayout.LayoutParams(0, dp(22), 1f))
+        }
+        header.addView(taskRow); root.addView(header)
+        setup = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), 0, dp(16), dp(4)) }
         serverField = field("Server: https://arxiv.example.com").apply { setText(state.optString("server")); inputType = 17 }
         codeField = field("Birdəfəlik qoşulma kodu")
         nameField = field("Cihaz adı").apply { setText(android.os.Build.MODEL) }
@@ -104,9 +144,8 @@ class MainActivity : Activity() {
             else if (cooldownRemaining() > 0) message(cooldownMessage())
             else web.loadUrl("https://www.instagram.com/")
         }
-        for (b in listOf(startButton, pauseButton, login)) buttons.addView(b, LinearLayout.LayoutParams(0, dp(48), 1f))
+        for (b in listOf(startButton, pauseButton, login)) buttons.addView(b, LinearLayout.LayoutParams(0, dp(38), 1f))
         root.addView(buttons)
-        root.addView(TextView(this).apply { text = "Oxunmayan postlar avtomatik ötürülür. Toplama üçün tətbiqi açıq saxlayın."; textSize = 10f; setTextColor(Color.GRAY); setPadding(dp(16), dp(4), dp(16), dp(8)) })
         web = createWebView()
         val browserFrame = FrameLayout(this)
         browserFrame.addView(web, FrameLayout.LayoutParams(-1, -1))
@@ -254,8 +293,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun field(hintText: String) = EditText(this).apply { hint = hintText; textSize = 14f; setSingleLine(true); minimumHeight = dp(48) }
-    private fun button(label: String, onClick: () -> Unit) = Button(this).apply { text = label; textSize = 11f; isAllCaps = false; setTextColor(green); setOnClickListener { onClick() } }
+    private fun field(hintText: String) = EditText(this).apply { hint = hintText; textSize = 14f; setSingleLine(true); minimumHeight = dp(42); setPadding(paddingLeft, dp(4), paddingRight, dp(4)) }
+    private fun button(label: String, onClick: () -> Unit) = Button(this).apply { text = label; textSize = 10f; isAllCaps = false; setTextColor(green); minHeight = dp(34); minimumHeight = dp(34); setPadding(dp(6), 0, dp(6), 0); setOnClickListener { onClick() } }
 
     private fun register() {
         if (runner?.isActive == true) return
@@ -522,11 +561,41 @@ class MainActivity : Activity() {
 
     private suspend fun readPost(url: String): JSONObject {
         var result = extract("post", url)
-        var tries = 0
-        while (result.optString("state") in listOf("incomplete", "expanding") && tries++ < 6) {
-            delay(500); result = extract("post", url)
+        var ready: JSONObject? = null
+        var readyAt = 0L
+        var stableReads = 0
+        val metrics = JSONObject()
+        // Caption and date often render before the action rail. Poll the same
+        // document briefly; never request private APIs or wait for hidden counts.
+        repeat(11) { attempt ->
+            val status = result.optString("state")
+            if (status !in listOf("ready", "incomplete", "expanding")) return result
+            val before = metrics.toString()
+            result.optJSONObject("metrics")?.let { extra ->
+                extra.keys().forEach { key ->
+                    val incoming = extra.getJSONObject(key)
+                    val previous = metrics.optJSONObject(key)
+                    if (previous == null || previous.optBoolean("approximate") || !incoming.optBoolean("approximate"))
+                        metrics.put(key, incoming)
+                }
+            }
+            if (result.optBoolean("countsHidden")) {
+                metrics.remove("likeCount")
+                if (metrics.optJSONObject("viewCount")?.optString("source") != "dom") metrics.remove("viewCount")
+            }
+            if (status == "ready") {
+                if (ready == null) readyAt = SystemClock.elapsedRealtime()
+                ready = JSONObject(result.toString())
+            }
+            ready?.put("metrics", JSONObject(metrics.toString()))
+            stableReads = if (before == metrics.toString()) stableReads + 1 else 0
+            if (ready != null && SystemClock.elapsedRealtime() - readyAt >= 2000L && stableReads >= 3) return ready!!
+            if (attempt == 10) return ready ?: result
+            delay(500)
+            result = extract("post", url)
         }
-        return result
+        if (result.optString("state") !in listOf("ready", "incomplete", "expanding")) return result
+        return ready ?: result
     }
 
     private class InstagramAccessRequired : Exception()
@@ -714,8 +783,7 @@ class MainActivity : Activity() {
                 val candidate = state.optJSONObject("candidates")?.optJSONObject(code(url))
                 val cached = candidate?.optJSONObject("post")
                 val knownDate = candidate?.optString("publishedAt")?.takeIf { it.isNotBlank() && it != "null" }?.let { Instant.parse(it) }
-                details.text = "@$username · ${from.atOffset(java.time.ZoneOffset.ofHours(4)).toLocalDate()} → ${until.minusSeconds(1).atOffset(java.time.ZoneOffset.ofHours(4)).toLocalDate()}\n${cp.optInt("matched")} saxlanıb · ${cp.optInt("filtered")} tarixdən kənar · ${cp.optInt("skipped")} oxunmayıb · ${deferred.length()} gözləyir"
-                message(if (retry != null) "Gözləyən post yenidən yoxlanılır…" else "${index + 1}-ci post: tarix, tam caption və saylar yoxlanılır…")
+                updateTaskDisplay()
                 var result: JSONObject
                 val keys = listOf("likeCount", "commentCount", "viewCount", "playCount", "shareCount", "repostCount", "saveCount")
                 if (knownDate != null && (knownDate.isBefore(from) || !knownDate.isBefore(until))) {
@@ -725,6 +793,18 @@ class MainActivity : Activity() {
                 } else {
                     result = readFromProfile(url)
                     if (result.optString("state") in listOf("ready", "outside")) { state.remove("limitedPostCodes"); save() }
+                    // Grid and detail layouts can expose different metrics for the same post.
+                    if (result.optString("state") == "ready" && cached != null) {
+                        val metrics = JSONObject(cached.optJSONObject("metrics")?.toString() ?: "{}")
+                        result.optJSONObject("metrics")?.let { extra ->
+                            extra.keys().forEach { key -> metrics.put(key, extra.get(key)) }
+                        }
+                        if (cached.optBoolean("countsHidden") || result.optBoolean("countsHidden")) {
+                            metrics.remove("likeCount")
+                if (metrics.optJSONObject("viewCount")?.optString("source") != "dom") metrics.remove("viewCount")
+                        }
+                        result.put("metrics", metrics)
+                    }
                     // A complete caption already verified in the profile document can complement the detail page.
                     if (result.optString("state") in listOf("incomplete", "expanding", "timeout", "unavailable") && cached?.optString("state") == "ready") {
                         val combined = JSONObject(cached.toString())
@@ -732,6 +812,12 @@ class MainActivity : Activity() {
                             val data = combined.optJSONObject(key) ?: JSONObject()
                             result.optJSONObject(key)?.let { extra -> extra.keys().forEach { k -> data.put(k, extra.get(k)) } }
                             combined.put(key, data)
+                        }
+                        if (cached.optBoolean("countsHidden") || result.optBoolean("countsHidden")) {
+                            combined.optJSONObject("metrics")?.remove("likeCount")
+                            combined.optJSONObject("metrics")?.let { metrics ->
+                                if (metrics.optJSONObject("viewCount")?.optString("source") != "dom") metrics.remove("viewCount")
+                            }
                         }
                         result = combined
                     }

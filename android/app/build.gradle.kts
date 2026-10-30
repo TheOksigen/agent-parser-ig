@@ -9,8 +9,8 @@ android {
         applicationId = "az.postarxiv.agent"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.4.1"
+        versionCode = 14
+        versionName = "0.4.9"
     }
     buildFeatures { buildConfig = true }
     buildTypes {

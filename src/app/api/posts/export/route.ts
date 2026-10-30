@@ -2,7 +2,7 @@ import { requireAdmin } from "@/lib/auth";
 import { filters } from "@/lib/filters";
 import { api, HttpError } from "@/lib/http";
 import { db } from "@/lib/db";
-import { metricKeys, metricLabels } from "@/lib/post-data";
+import { jsonObject, metricKeys, metricLabels } from "@/lib/post-data";
 
 function cell(value: string) {
   // Neutralize spreadsheet formulas while preserving newlines and Unicode.
@@ -39,7 +39,7 @@ export const GET = api(async (request) => {
                   "Instagram ID",
                   "Media növü",
                   ...metricKeys.map((key) => metricLabels[key]),
-                  "Sayların mənbəyi, dəqiqliyi və yoxlama vaxtı (JSON)",
+                  "Şərh sayının mənbəyi, dəqiqliyi və yoxlama vaxtı (JSON)",
                   "Əlavə post məlumatları (JSON)",
                 ]
                   .map(cell)
@@ -83,7 +83,9 @@ export const GET = api(async (request) => {
                   p.instagramId ?? "",
                   p.mediaType ?? "",
                   ...metricKeys.map((key) => p[key]?.toString() ?? ""),
-                  p.metricDetails ? JSON.stringify(p.metricDetails) : "",
+                  jsonObject(p.metricDetails).commentCount != null
+                    ? JSON.stringify({ commentCount: jsonObject(p.metricDetails).commentCount })
+                    : "",
                   p.metadata ? JSON.stringify(p.metadata) : "",
                 ]
                   .map(cell)

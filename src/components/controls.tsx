@@ -108,11 +108,13 @@ export function ActionButton({
   payload,
   children,
   secondary = true,
+  confirmation,
 }: {
   action: string;
   payload: unknown;
   children: React.ReactNode;
   secondary?: boolean;
+  confirmation?: string;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -123,6 +125,7 @@ export function ActionButton({
         className={secondary ? "button secondary small" : "button small"}
         disabled={pending}
         onClick={async () => {
+          if (confirmation && !window.confirm(confirmation)) return;
           setPending(true);
           setError("");
           try {
@@ -387,6 +390,49 @@ export function SearchForm({
           Intervalı dəyiş / irəliləyişə bax ↗
         </a>
       </p>
+      <Feedback error={error} message={message} />
+    </form>
+  );
+}
+
+export function ManualCollectionForm({ from, to, today, profile = "" }: { from: string; to: string; today: string; profile?: string }) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setPending(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await post("manual-collect", {
+        profile: data.get("manualProfile"), from: data.get("manualFrom"),
+        to: data.get("manualTo"), publicConfirmed: data.get("manualConfirmed") === "on",
+      });
+      setMessage(`${result.message} Android agentində Başlat seçin; nəticələr toplandıqca aşağıda görünəcək.`);
+      const params = new URLSearchParams({ q: result.username });
+      router.push(`/manual?${params}`);
+      router.refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <form className="panel search-panel manual-collection" onSubmit={submit}>
+      <h2>Əl ilə profil topla</h2>
+      <p className="muted text-small">Profil adı və tarix aralığını daxil edin. Qoşulmuş Android agenti postları açıb görünən şərh sayını toplayacaq.</p>
+      <div className="search-fields">
+        <div className="field wide"><label htmlFor="manualProfile">Instagram profili</label><input id="manualProfile" name="manualProfile" placeholder="@profil_adi və ya profil linki" maxLength={200} defaultValue={profile} key={profile} required /></div>
+        <div className="field"><label htmlFor="manualFrom">Başlanğıc</label><input id="manualFrom" name="manualFrom" type="date" defaultValue={from} min="2010-01-01" max={today} required /></div>
+        <div className="field"><label htmlFor="manualTo">Bitiş</label><input id="manualTo" name="manualTo" type="date" defaultValue={to} min="2010-01-01" max={today} required /></div>
+      </div>
+      <label className="check"><input type="checkbox" name="manualConfirmed" required /> Profil ictimaidir və məlumatlarını toplamağa icazəm var.</label>
+      <div className="search-bottom"><button className="button" disabled={pending}>{pending ? "Növbəyə əlavə edilir…" : "Toplamanı başlat"}</button></div>
+      <p className="muted text-small">Hər iki tarix daxildir · Bakı vaxtı. Profilin bu aralığı hər 24 saatdan bir yenidən yoxlanılır; yeni aralıq aktiv tapşırığı əvəz edir.</p>
       <Feedback error={error} message={message} />
     </form>
   );

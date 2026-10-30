@@ -6,11 +6,13 @@ import {
   Smartphone,
   Users,
   ArrowUpRight,
+  UserRoundSearch,
 } from "lucide-react";
 import { Logout } from "./controls";
 
 const nav = [
   { path: "/", label: "Paylaşımlar", icon: BookOpen },
+  { path: "/manual", label: "Əl ilə toplama", icon: UserRoundSearch },
   { path: "/profiles", label: "Profillər", icon: Users },
   { path: "/tasks", label: "Tapşırıqlar", icon: ListChecks },
   { path: "/devices", label: "Cihazlar", icon: Smartphone },

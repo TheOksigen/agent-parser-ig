@@ -40,6 +40,7 @@ export function filters(params: Params) {
     .toLowerCase()
     .replace(/^@/, "")
     .slice(0, 30);
+  const exact = one(params.exact) === "1";
   const page = Math.min(
     100000,
     Math.max(1, Number.parseInt(one(params.page), 10) || 1),
@@ -51,18 +52,19 @@ export function filters(params: Params) {
       ? {
           profileLinks: {
             some: {
-              profile: { username: { contains: profile, mode: "insensitive" } },
+              profile: { username: exact ? { equals: profile, mode: "insensitive" } : { contains: profile, mode: "insensitive" } },
             },
           },
         }
       : {}),
   };
-  return { from, to, profile, page, range, where };
+  return { from, to, profile, exact, page, range, where };
 }
 export function queryString(values: {
   from: string;
   to: string;
   profile: string;
+  exact?: string;
   page?: number;
 }) {
   const p = new URLSearchParams();

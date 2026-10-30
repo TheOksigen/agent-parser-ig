@@ -141,6 +141,50 @@ export async function handleAdmin(request: Request, action: string) {
       message: `${result.queued} tapşırıq yaradıldı. ${result.replaced} əvvəlki tapşırıq yeni tarixlə əvəz edildi; ${result.reused} tapşırıq artıq bu tarixlər üzrə işləyir.`,
     });
   }
+  if (action === "manual-collect") {
+    const input = z.object({
+      profile: z.string().trim().min(1).max(200),
+      from: z.string(),
+      to: z.string(),
+      publicConfirmed: z.literal(true),
+    }).parse(raw);
+    let username = input.profile.trim();
+    if (/^https?:\/\//i.test(username)) {
+      let url: URL;
+      try { url = new URL(username); } catch {
+        throw new HttpError(400, "USERNAME", "Düzgün Instagram profil linki daxil edin.");
+      }
+      if (!["instagram.com", "www.instagram.com"].includes(url.hostname.toLowerCase()) || !/^\/[a-z0-9._]+\/?$/i.test(url.pathname))
+        throw new HttpError(400, "USERNAME", "Düzgün Instagram profil linki daxil edin.");
+      username = url.pathname.split("/")[1];
+    }
+    username = username.replace(/^@/, "").toLowerCase();
+    if (!/^[a-z0-9._]{1,30}$/.test(username))
+      throw new HttpError(400, "USERNAME", "Düzgün Instagram istifadəçi adı daxil edin.");
+    let range;
+    try { range = dateRange(input.from, input.to); } catch (e) {
+      throw new HttpError(400, "DATES", (e as Error).message);
+    }
+    const profile = await db.profile.upsert({
+      where: { username },
+      create: { username, publicConfirmed: true },
+      update: {},
+    });
+    if (!profile.active || !profile.publicConfirmed)
+      throw new HttpError(409, "PROFILE_INACTIVE", "Profil dayandırılıb. Əvvəlcə Profillər bölməsində aktivləşdirin.");
+    await db.$executeRaw`
+      INSERT INTO instagram_parser."PostProfile" ("postId", "profileId")
+      SELECT p.id, ${profile.id} FROM instagram_parser."Post" p
+      WHERE p."authorUsername" = ${username} OR ${username} = ANY(p."collaboratorUsernames")
+      ON CONFLICT DO NOTHING`;
+    const result = await enqueueJobs([{ profileId: profile.id, ...range, reason: "MANUAL" }], true);
+    if (!result.queued && !result.reused)
+      throw new HttpError(409, "PROFILE_INACTIVE", "Profil üçün tapşırıq yaradıla bilmədi. Profilin aktiv olduğunu yoxlayın.");
+    return Response.json({ username, message: result.reused
+      ? "Bu profil və tarixlər üzrə tapşırıq artıq davam edir."
+      : result.replaced ? "Əvvəlki tapşırıq yeni tarix aralığı ilə əvəz edildi."
+      : "Tapşırıq növbəyə əlavə edildi." });
+  }
   if (action === "pairing") {
     const code = randomBytes(8).toString("hex").toUpperCase();
     await db.pairing.create({
@@ -179,12 +223,20 @@ export async function handleAdmin(request: Request, action: string) {
     });
     return Response.json({ message: "Cihazın vəziyyəti yeniləndi." });
   }
-  if (action === "task-retry" || action === "task-cancel") {
+  if (action === "task-retry" || action === "task-cancel" || action === "task-delete") {
     const input = z.object({ id: z.string() }).parse(raw);
     const task = await db.task.findUnique({ where: { id: input.id } });
     if (!task) throw new HttpError(404, "TASK", "Tapşırıq tapılmadı.");
+    if (action === "task-delete") {
+      const deleted = await db.task.deleteMany({
+        where: { id: input.id, status: { notIn: [...activeStatuses] } },
+      });
+      if (!deleted.count)
+        throw new HttpError(409, "TASK_ACTIVE", "Aktiv tapşırığı silmək üçün əvvəlcə onu dayandırın.");
+      return Response.json({ message: "Tapşırıq silindi; arxivdəki paylaşımlar saxlanıldı." });
+    }
     if (action === "task-cancel") {
-      await db.task.updateMany({
+      const stopped = await db.task.updateMany({
         where: { id: input.id, status: { in: [...activeStatuses] } },
         data: {
           status: "CANCELLED",
@@ -194,6 +246,8 @@ export async function handleAdmin(request: Request, action: string) {
           message: "İstifadəçi dayandırdı.",
         },
       });
+      if (!stopped.count)
+        throw new HttpError(409, "TASK_FINISHED", "Tapşırıq artıq aktiv deyil. Səhifəni yeniləyin.");
     } else {
       const created = await enqueue(
         task.profileId,

@@ -12,7 +12,7 @@ import { requirePageAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bakuDay, filters, queryString, type Params } from "@/lib/filters";
 import { Shell, PageHeading, Empty } from "@/components/shell";
-import { SearchForm } from "@/components/controls";
+import { AutoRefresh, SearchForm } from "@/components/controls";
 import { postView } from "@/lib/post-view";
 import { PostCard } from "@/components/post-card";
 
@@ -59,18 +59,19 @@ export default async function PostsPage({
   for (const post of posts)
     for (const link of post.profileLinks) {
       const name = link.profile.username;
-      if (f.profile && !name.includes(f.profile)) continue;
+      if (f.profile && (f.exact ? name !== f.profile : !name.includes(f.profile))) continue;
       const group = groups.get(name) ?? [];
       group.push(post);
       groups.set(name, group);
     }
-  const qs = { from: f.from, to: f.to, profile: f.profile };
+  const qs = { from: f.from, to: f.to, profile: f.profile, ...(f.exact ? { exact: "1" } : {}) };
   return (
     <Shell active="/">
+      <AutoRefresh />
       <PageHeading
         eyebrow="PAYLAŞIM KİTABXANASI"
         title="Paylaşımlar"
-        description="Tam təsvir, tarix və postun say göstəriciləri bir arxivdə."
+        description="Tam təsvir, tarix və şərh sayı bir arxivdə."
         action={
           <a
             className="button secondary"

@@ -4,7 +4,7 @@ Instagram ictimai profilləri üçün Bun + Next.js (SSR), Prisma/PostgreSQL və
 
 **Instagram API-si tələb olunmur.** Agent telefonda açıq WebView səhifəsindən post linklərini, tam caption və dəqiq tarixi oxuyur. Giriş lazım olsa istifadəçi birbaşa Instagram səhifəsində daxil olur. Instagram şifrəsi və sessiya cookie-ləri backend-ə göndərilmir. Backend profil, tapşırıq, tam caption və postun əlçatan göstəricilərini saxlayır.
 
-Bu prototipin veb və APK build-ləri yoxlanılıb. İlk versiya istifadəçi tərəfindən real cihazda işlək olaraq yoxlanılıb. **0.4.1 dəyişikliklərinin cihazda davranışı və 1500 profil üzrə yük hələ təsdiqlənməyib.** Yenilənmiş `artifacts/postarxiv-agent-0.4.1.apk` faylını əvvəlki APK-nin üzərinə quraşdırın; tətbiqi silməyin ki, giriş və qoşulma saxlanılsın. 0.1-dən keçiddə yarımçıq aktiv iş öz tarix aralığında başdan yoxlanır ki, artıq arxivdəki postların göstəriciləri də toplansın; shortcode üzrə təkrar post yaranmır.
+Bu prototipin veb və APK build-ləri yoxlanılıb. İlk versiya istifadəçi tərəfindən real cihazda işlək olaraq yoxlanılıb. **0.4.8 dəyişikliklərinin cihazda davranışı və 1500 profil üzrə yük hələ təsdiqlənməyib.** Yenilənmiş `artifacts/postarxiv-agent-0.4.8.apk` faylını əvvəlki APK-nin üzərinə quraşdırın; tətbiqi silməyin ki, giriş və qoşulma saxlanılsın. 0.1-dən keçiddə yarımçıq aktiv iş öz tarix aralığında başdan yoxlanır ki, artıq arxivdəki postların göstəriciləri də toplansın; shortcode üzrə təkrar post yaranmır.
 
 ## Lokal işə salmaq
 
@@ -27,7 +27,9 @@ Brauzer: `http://localhost:3000`. Giriş şifrəsi `.env` faylındakı `ADMIN_PA
 
 ## Android ilə ilk manual yoxlama
 
-1. `artifacts/postarxiv-agent-debug.apk` faylını Android 8+ cihazında quraşdırın. Android naməlum mənbədən quraşdırma icazəsi istəyə bilər. Bu APK manual prototip yoxlaması üçün debug imzalıdır.
+Bir profili birbaşa toplamaq üçün **Əl ilə toplama** səhifəsində istifadəçi adını və ya profil linkini, tarix aralığını yazın və təsdiqdən sonra **Toplamanı başlat** seçin. Profil siyahıda yoxdursa əlavə edilir. Android agentində **Başlat** seçildikdən sonra nəticələr profilin altında görünür; açıq siyahını yeniləmək üçün **Postları yenilə** seçin. CSV ixracı **Paylaşımlar** səhifəsindədir. Seçilmiş aralıq mövcud profil toplama qaydasına uyğun hər 24 saatdan bir yenidən yoxlanılır.
+
+1. `artifacts/postarxiv-agent-0.4.8.apk` faylını Android 8+ cihazında quraşdırın. Android naməlum mənbədən quraşdırma icazəsi istəyə bilər. Bu APK manual prototip yoxlaması üçün debug imzalıdır.
 2. Telefonu serverlə eyni Wi-Fi şəbəkəsinə qoşun. APK-də server kimi kompüterin LAN ünvanını yazın: `http://192.168.x.x:3000`. Telefonda `localhost` kompüterə aid deyil. Server uzaqdadırsa HTTPS ünvanını istifadə edin.
 3. Veb interfeysdə **Cihazlar → Cihaz qoş** seçin. 15 dəqiqəlik birdəfəlik kodu APK-yə yazın, cihaz adı verin və **Serverə qoşul** seçin. Hər cihaz üçün ayrıca kod yaradılır; eyni APK istifadə edilir.
 4. Android-də **Instagram** düyməsini açın. Lazımdırsa girişi, 2FA və təhlükəsizlik yoxlamasını özünüz tamamlayın.
@@ -39,9 +41,17 @@ Brauzer: `http://localhost:3000`. Giriş şifrəsi `.env` faylındakı `ADMIN_PA
 
 Giriş tələb edən səhifələrdə və CAPTCHA zamanı avtomatik keçid yoxdur. Məxfi profil toplanmır; agent növbəti tapşırığa keçir. Profilin ictimai olduğunu əvvəlcədən təsdiqləmək istifadəçinin məsuliyyətidir.
 
+## Göstəricilər — 0.4.8
+
+- Bəyənmə, şərh, baxış, oynatma, paylaşma, repost və yadda saxlama sayları səhifə təqdim etdikdə toplanır. İkonun yanındakı ayrıca say, mətn elementi və təsdiqlənmiş eyni shortcode-a aid JSON hissələri oxunur. Şərhin öz bəyənmələri postun bəyənmə sayı kimi götürülmür.
+- Caption hazır olduqdan sonra agent göstəricilərin yüklənməsi üçün ən azı 2 saniyə, dəyişiklik davam edirsə 5 saniyəyədək həmin səhifəni yenidən oxuyur. Profil və post səhifəsindəki göstəricilər birləşdirilir. Əlavə Instagram API sorğusu göndərilmir.
+- Gizli saylar və təqdim edilməyən statistika `—` qalır. Yadda saxlama/paylaşma/repost düyməsinin olması sayın təqdim edildiyi demək deyil. `like_and_view_counts_disabled` olduqda daxili placeholder bəyənmə/baxış sayları qəbul edilmir.
+- Brauzerdə `DfH5U5YMaB9` postundan 7 bəyənmə və 1 şərh həm JSON, həm görünən DOM vasitəsilə ayrıca oxunub. `De4j6PrtS1U` postunda gizli bəyənmə sayı qəbul edilməyib, təqdim edilən 27 şərh oxunub. Telefonda daxil olunmuş sessiya ayrıca yoxlanmalıdır.
+- Yeni APK-ni əvvəlki tətbiqin üzərinə quraşdırın. Əvvəldən toplanmış postları yeniləmək üçün profilin tarix aralığını seçib **Topla və göstər** ilə yeni toplama başladın. **Postları yenilə** yalnız bazadakı nəticələri yenidən göstərir; Instagram-dan məlumat toplamır.
+
 ## Instagram HTTP 429 / açılmayan linklər
 
-- **0.4.1 postu profilin içindəki kartına toxunaraq açır.** Birbaşa post URL-ni ayrıca WebView-də yükləmək çıxarılıb. Eyni pəncərədə Instagram-ın keçidi işləyir; post oxunduqdan sonra bağlama/geri düyməsi ilə profilə qayıdılır və sürüşdürmə mövqeyi bərpa olunur. Keçid idarəsi `android/app/src/main/assets/navigation.js` faylındadır.
+- **0.4.6 postu profilin içindəki kartına toxunaraq açır.** Birbaşa post URL-ni ayrıca WebView-də yükləmək çıxarılıb. Eyni pəncərədə Instagram-ın keçidi işləyir; post oxunduqdan sonra bağlama/geri düyməsi ilə profilə qayıdılır və sürüşdürmə mövqeyi bərpa olunur. Keçid idarəsi `android/app/src/main/assets/navigation.js` faylındadır.
 - Kliklənəcək kartın shortcode-u və toxunma nöqtəsindəki element yoxlanır. Növbəyə yalnız profildə real görünən kartlar əlavə edilir; daxili JSON-dakı hələ göstərilməmiş postlar ayrıca link kimi açılmır. Fasilədən sonra kart səhifədə yoxdursa, maksimum 8 sürüşdürmə ilə axtarılır; tapılmayan kart sonra yoxlanmaq üçün saxlanır.
 - Açılmış post pəncərəsi arxadakı profilin mətnindən ayrılır. Instagram klikdən sonra giriş pəncərəsi göstərərsə agent onu `NEEDS_LOGIN` kimi bildirir. Lokal brauzerdə `DeMzG16NtF9` kartının profil üzərindən tapılması və klikdəki giriş tələbinin tanınması yoxlanılıb; telefondakı daxil olunmuş sessiyada tam oxuma ayrıca yoxlanmalıdır.
 - Chrome-da da post HTTP 429 qaytarırsa Instagram sorğu limiti tətbiq edir. Ana səhifənin açılması postların da əlçatan olduğunu göstərmir. Ardıcıl yeniləmə və yeni toplama cəhdləri etmədən fasilə verin; limitin götürülmə vaxtına zəmanət yoxdur.
@@ -81,8 +91,8 @@ Giriş tələb edən səhifələrdə və CAPTCHA zamanı avtomatik keçid yoxdur
 - Başlanğıc limitlər: 200 sürüşdürmə, 500 post linki, səhifə açma/sürüşdürmə arasında standart 10 saniyə (admin paneldən dəyişir). Dəqiq vaxt və caption hazır olanda şəkillərin tam yüklənməsi gözlənilmir. 10 postadək məlumat bir sorğuda göndərilir; hər post əvvəlcə şifrələnmiş lokal yaddaşa yazılır. Böyük interval üçün `.env` limitlərini artırmaq olar.
 - Yeni profil tarix seçilənədək avtomatik işə başlamır. **Topla və göstər** seçilmiş aralığı profilə yazır, fərqli tarixdəki aktiv tapşırığı ləğv edib yenisini açır. Eyni aralıqda artıq aktiv iş varsa davam edir. Bitmiş iş üçün düyməyə yenidən basmaq sayları və caption-u yeniləyən təkrar toplama yaradır.
 - Dövri toplama profilə yazılmış **eyni tarix aralığını** hər 24 saatda yenidən yoxlayır; aralığı özbaşına son 30 günə dəyişmir. Yeni günləri daxil etmək üçün bitiş tarixini yeniləyib toplamanı başladın.
-- Tam caption, hashtag, permalink, dəqiq tarix və yoxlama vaxtı ilə yanaşı Instagram ID, media növü, bəyənmə/şərh/baxış/oynatma/paylaşma/repost/yadda saxlama sayları, mediaya aid ölçü/alt mətn/URL/saniyə sayı, karusel elementləri, məkan, etiketlənmiş və ortaq müəlliflər yalnız səhifə bunları təqdim etdikdə saxlanılır. Şərhlərin mətnləri, sessiya məlumatları və səhifənin bütöv daxili JSON-u saxlanılmır.
-- **Görünməyən say sıfır deyil.** Naməlum göstərici `NULL` qalır; sonrakı yoxlamada gizlənibsə əvvəlki müşahidə öz vaxtı ilə qorunur. `1.2K` kimi yuvarlaq göstərici təxmini (`≈`) qeyd olunur. Repost, paylaşma və yadda saxlama sayı bir çox postda təqdim olunmur. Hər sayın mənbəyi və yoxlanma vaxtı ayrıca saxlanılır; tooltip və CSV-də görünür. CSV-də boş say naməlumdur, həqiqi sıfır `0`-dır; təxminilik ayrıca JSON sütunundadır.
+- Tam caption, hashtag, permalink, dəqiq tarix və yoxlama vaxtı ilə yanaşı Instagram ID, media növü, əlçatan bəyənmə, şərh, baxış, oynatma, paylaşma, repost və yadda saxlama sayları, mediaya aid ölçü/alt mətn/URL/saniyə sayı, karusel elementləri, məkan, etiketlənmiş və ortaq müəlliflər yalnız səhifə bunları təqdim etdikdə saxlanılır. Şərhlərin mətnləri, sessiya məlumatları və səhifənin bütöv daxili JSON-u saxlanılmır.
+- **Görünməyən göstərici sıfır deyil.** Naməlum say `NULL` qalır; sonrakı yoxlamada gizlənibsə əvvəlki müşahidə öz vaxtı ilə qorunur. `1.2K` kimi yuvarlaq say təxmini (`≈`) qeyd olunur. Göstəricilərin yoxlanma vaxtı tooltip-də, mənbəyi və digər detalları CSV-də saxlanır. CSV-də boş say naməlumdur, həqiqi sıfır `0`-dır; təxminilik ayrıca JSON sütunundadır. Bütün yeddi göstərici paneldə göstərilir, CSV-yə daxil edilir və təqdim edilən yeni müşahidələrlə yenilənir.
 - Şəkil/video faylları backend-ə yüklənmir. Android WebView Instagram səhifəsini normal göstərərkən həmin səhifənin mediası yüklənə bilər.
 
 ## Etibarlılıq və cihaz idarəetməsi
